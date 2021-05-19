@@ -58,7 +58,8 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         _lastAutoScrollUpdateTime{ std::nullopt },
         _cursorTimer{},
         _blinkTimer{},
-        _searchBox{ nullptr }
+        _searchBox{ nullptr },
+        _bellLightAnimation{ Window::Current().Compositor().CreateScalarKeyFrameAnimation() }
     {
         InitializeComponent();
 
@@ -166,6 +167,11 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         static constexpr auto AutoScrollUpdateInterval = std::chrono::microseconds(static_cast<int>(1.0 / 30.0 * 1000000));
         _autoScrollTimer.Interval(AutoScrollUpdateInterval);
         _autoScrollTimer.Tick({ this, &TermControl::_UpdateAutoScroll });
+
+        // Add key frames and a duration to our bell light animation
+        _bellLightAnimation.InsertKeyFrame(0.0, 2.0);
+        _bellLightAnimation.InsertKeyFrame(1.0, 1.0);
+        _bellLightAnimation.Duration(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(TerminalWarningBellInterval)));
 
         _ApplyUISettings(_settings);
     }
@@ -2371,6 +2377,39 @@ namespace winrt::Microsoft::Terminal::Control::implementation
     const size_t TermControl::TaskbarProgress() const noexcept
     {
         return _core->TaskbarProgress();
+    }
+
+    void TermControl::BellLightOn()
+    {
+        if (!_bellLightTimer)
+        {
+            // Start the timer, when the timer ticks we switch off the light
+            DispatcherTimer invertTimer;
+            invertTimer.Interval(std::chrono::milliseconds(TerminalWarningBellInterval));
+            invertTimer.Tick({ get_weak(), &TermControl::_BellLightOff });
+            invertTimer.Start();
+            _bellLightTimer.emplace(std::move(invertTimer));
+
+            // Switch on the light and animate the intensity to fade out
+            VisualBellLight::SetIsTarget(RootGrid(), true);
+            BellLight().CompositionLight().StartAnimation(L"Intensity", _bellLightAnimation);
+        }
+    }
+
+    void TermControl::_BellLightOff(Windows::Foundation::IInspectable const& /* sender */,
+                                    Windows::Foundation::IInspectable const& /* e */)
+    {
+        if (_bellLightTimer)
+        {
+            // Stop the timer and switch off the light
+            _bellLightTimer->Stop();
+            _bellLightTimer.reset();
+
+            if (!_closing)
+            {
+                VisualBellLight::SetIsTarget(RootGrid(), false);
+            }
+        }
     }
 
     // Method Description:

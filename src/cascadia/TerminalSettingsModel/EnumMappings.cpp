@@ -43,7 +43,6 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
     DEFINE_ENUM_MAP(Windows::UI::Xaml::Media::Stretch, BackgroundImageStretchMode);
     DEFINE_ENUM_MAP(Microsoft::Terminal::Control::TextAntialiasingMode, TextAntialiasingMode);
     DEFINE_ENUM_MAP(Microsoft::Terminal::Core::CursorStyle, CursorStyle);
-    DEFINE_ENUM_MAP(Model::BellStyle, BellStyle);
 
     // FontWeight is special because the JsonUtils::ConversionTrait for it
     // creates a FontWeight object, but we need to use the uint16_t value.
@@ -54,6 +53,26 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
             for (auto [enumStr, enumVal] : JsonUtils::ConversionTrait<Windows::UI::Text::FontWeight>::mappings)
             {
                 map.Insert(winrt::to_hstring(enumStr), enumVal);
+            }
+            return map;
+        }();
+        return enumMap;
+    }
+
+    // BellStyle is special because we deprecated 'visual' for the settings UI but
+    // want to allow it for legacy users
+    winrt::Windows::Foundation::Collections::IMap<winrt::hstring, Model::BellStyle> EnumMappings::BellStyle()
+    {
+        static IMap<winrt::hstring, Model::BellStyle> enumMap = []() {
+            auto map = single_threaded_map<winrt::hstring, Model::BellStyle>();
+            for (auto [enumStr, enumVal] : JsonUtils::ConversionTrait<Model::BellStyle>::mappings)
+            {
+                const auto enumHStr = winrt::to_hstring(enumStr);
+                // skip visual
+                if (enumHStr != L"visual")
+                {
+                    map.Insert(enumHStr, enumVal);
+                }
             }
             return map;
         }();
